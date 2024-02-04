@@ -19,9 +19,17 @@ service to integrate cloud data providers
 4. get [client_secret.json](https://stackoverflow.com/questions/40136699/using-google-api-for-python-where-do-i-get-the-client-secrets-json-file-from) file and add it to root directory
 
 ### Methods
+* get files
+* get folders
 * (In progress) GDrive -> S3 Folder Snapshot migration
 * (Future) Gdrive -> S3 archive
 * (Future) GDrive -> S3 Master-Slave Folder sync
+
+### browse files and folders
+[video demo: browse GDrive files and folders](https://taylorhickem-media.s3.ap-southeast-1.amazonaws.com/videos/roles/life_hacks/projects/2024001_gdrive_to_s3/clouddata_demo.mp4)
+- get folder_id from folder_name
+- get files
+- get subfolders
 
 ### GDrive->S3
 
