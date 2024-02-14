@@ -21,12 +21,21 @@ from googleapiclient.http import MediaIoBaseDownload
 SCOPES = ['https://www.googleapis.com/auth/drive']
 CLIENT_SECRET_DEFAULT = 'client_secret.json'
 ordRef = {'A': 65}
+FIELDS_DEFAULT = 'nextPageToken, files(kind, mimeType, id, name, modifiedTime)'
+MODIFIED_DATE_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
 CONFIG_DIR = ''
 CONFIG_FILES = {
     'QUERY_OPERATORS': {
         'file_type': 'json',
         'filename': 'google_api_query_operators.json'
     }
+}
+DIR_CONFIG_DEFAULT = {
+    'name': '',
+    'modifiedTime': '',
+    'folders': [],
+    'native_files': [],
+    'non_native_files': []
 }
 QUERY_OPERATORS = {}
 
@@ -95,12 +104,15 @@ class GDriveClient(object):
         payload = file.getvalue()
         return payload
 
-    def query_contents(self, qry_stm='', query_alias='', **args):
+    def query_contents(self, qry_stm='', query_alias='', fields='', **args):
+        if not fields:
+            fields = FIELDS_DEFAULT
         if not qry_stm:
             qry_stm = self._get_query_stm(query_alias, **args)
         response = self.service.files().list(
             q=qry_stm,
-            spaces='drive'
+            spaces='drive',
+            fields=fields
         ).execute()
         contents = response['files']
         return contents
@@ -134,11 +146,41 @@ class GDriveClient(object):
         folder_id = ''
         qry_stm = "name='" + folder_name + "'"
         qry_stm = qry_stm + " and " + self._get_query_stm('folders_only')
-        contents = self._query_contents(qry_stm=qry_stm)
+        contents = self.query_contents(qry_stm=qry_stm)
         found_folder = len(contents) > 0
         if found_folder:
             folder_id = contents[0]['id']
         return folder_id
+
+    def get_directory_config(self, folder_name, folder_id=''):
+        config = DIR_CONFIG_DEFAULT.copy()
+        config['name'] = folder_name
+
+        if folder_id == '':
+            folder_id = self.get_folder_id(folder_name)
+            config['id'] = folder_id
+
+        subfolders = self.get_subfolders(folder_id=folder_id)
+        native_files = self.get_native_files_in_folder(folder_id=folder_id)
+        non_native_files = self.get_non_native_files_in_folder(folder_id=folder_id)
+
+        config['native_files'] = native_files
+        config['non_native_files'] = non_native_files
+
+        if subfolders:
+            sub_configs = []
+            for s in subfolders:
+                subfolder_id = s['id']
+                subfolder_name = s['name']
+                sub_config = self.get_directory_config(subfolder_name, folder_id=subfolder_id)
+                sub_configs.append(sub_config)
+            config['folders'] = sub_configs
+
+        #modified_times = []
+        #if native_files:
+        #    native_mt = [f['modifiedTime'] for f in native_files]
+
+        return config
 
     def get_files_in_folder(self, folder_name='', folder_id='',
                             include_subfolders=False,
@@ -155,7 +197,29 @@ class GDriveClient(object):
                 query_alias = 'files_in_folder'
             if mime_type:
                 args['mime_type'] = mime_type
-            contents = self._query_contents(query_alias=query_alias, **args)
+            contents = self.query_contents(query_alias=query_alias, **args)
+        return contents
+
+    def get_native_files_in_folder(self, folder_name='', folder_id=''):
+        query_alias = 'native_files_in_folder'
+        contents = []
+        args = {}
+        if folder_id == '':
+            folder_id = self.get_folder_id(folder_name)
+        if len(folder_id) > 0:
+            args['folder_id'] = folder_id
+            contents = self.query_contents(query_alias=query_alias, **args)
+        return contents
+
+    def get_non_native_files_in_folder(self, folder_name='', folder_id=''):
+        query_alias = 'non_native_files_in_folder'
+        contents = []
+        args = {}
+        if folder_id == '':
+            folder_id = self.get_folder_id(folder_name)
+        if len(folder_id) > 0:
+            args['folder_id'] = folder_id
+            contents = self.query_contents(query_alias=query_alias, **args)
         return contents
 
     def get_subfolders(self, folder_name='', folder_id='',
@@ -169,7 +233,7 @@ class GDriveClient(object):
             query_alias = 'folders_in_folder'
             if mime_type:
                 args['mime_type'] = mime_type
-            contents = self._query_contents(query_alias=query_alias, **args)
+            contents = self.query_contents(query_alias=query_alias, **args)
         return contents
 
     def download_files_in_folder(self, folder_name, folder_id, mime_type=None):

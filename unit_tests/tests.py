@@ -8,10 +8,12 @@ TESTS = [
     'test_002_list_subfolders',
     'test_003_list_files_in_folder',
     'test_004_list_native_files_in_folder'
-    'test_005_list_non_native_files_in_folder'
+    'test_005_list_non_native_files_in_folder',
+    'test_006_get_directory_config'
 ]
 L0_FOLDER = '03 Finances'
 LEAF_FOLDER_ID = '1TsMGximJs_k2ip-D7rXrLTZJvIfRI1xD'
+LEAF_FOLDER_NAME = '05 kpi_records'
 TEST_RESULTS = {}
 gdclient = None
 
@@ -162,6 +164,30 @@ def test_005_list_non_native_files_in_folder():
                 }
         except Exception as e:
             errors = f'ERROR. Failed to fetch native folder files. {str(e)}'
+    else:
+        errors = 'GDrive client not loaded.'
+    test_result['success'] = test_success
+    if data:
+        test_result['data'] = data
+    if errors:
+        test_result['errors'] = errors
+    return test_result
+
+
+def test_006_get_directory_config():
+    test_result = {}
+    test_success = False
+    data = {}
+    errors = ''
+    client_login()
+    if gdclient:
+        try:
+            config = gdclient.get_directory_config(LEAF_FOLDER_NAME, folder_id=LEAF_FOLDER_ID)
+            test_success = len(config) > 0
+            if test_success:
+                data = config
+        except Exception as e:
+            errors = f'ERROR. Failed to fetch directory config. {str(e)}'
     else:
         errors = 'GDrive client not loaded.'
     test_result['success'] = test_success

@@ -26,6 +26,8 @@ service to integrate cloud data providers
 * (Future) GDrive -> S3 Master-Slave Folder sync
 
 ### browse files and folders
+[Google Drive API: search for files and folders](https://developers.google.com/drive/api/guides/search-files)
+
 [video demo: browse GDrive files and folders](https://taylorhickem-media.s3.ap-southeast-1.amazonaws.com/videos/roles/life_hacks/projects/2024001_gdrive_to_s3/clouddata_demo.mp4)
 - get folder_id from folder_name
 - get files
@@ -35,7 +37,21 @@ service to integrate cloud data providers
 
 #### Folder snapshot
 
-to be updated ...
+1. scan directory recursively to get directory tree JSON
+2. 
+
+#### directory tree JSON
+
+```
+{
+  name: <folder_name>,
+  id: <folder_id>,
+  modifiedTime: <last_modified_timestamp>,
+  folders: [<recursive subfolders >],
+  native_files: [],
+  non_native_files: []
+}
+```
 
 #### (FUTURE) Archive
 
