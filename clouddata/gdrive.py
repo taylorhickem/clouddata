@@ -7,6 +7,8 @@
 # import dependencies
 #-----------------------------------------------------------------------------
 import io
+import os
+import json
 from httplib2 import Http
 from oauth2client.service_account import ServiceAccountCredentials
 from googleapiclient.discovery import build
@@ -19,13 +21,34 @@ from googleapiclient.http import MediaIoBaseDownload
 SCOPES = ['https://www.googleapis.com/auth/drive']
 CLIENT_SECRET_DEFAULT = 'client_secret.json'
 ordRef = {'A': 65}
-
-
-QUERY_OPERATORS = {
-    'isa_folder': "mimeType='application/vnd.google-apps.folder'",
-    'isnota_folder': "mimeType!='application/vnd.google-apps.folder'"
+CONFIG_DIR = ''
+CONFIG_FILES = {
+    'QUERY_OPERATORS': {
+        'file_type': 'json',
+        'filename': 'google_api_query_operators.json'
+    }
 }
+QUERY_OPERATORS = {}
 
+
+#-----------------------------------------------------------------------------
+# config data
+#-----------------------------------------------------------------------------
+
+def config_load():
+    global CONFIG_DIR
+    CONFIG_DIR = os.path.dirname(__file__)
+    for cf in CONFIG_FILES:
+        filename = CONFIG_FILES[cf]['filename']
+        file_type = CONFIG_FILES[cf]['file_type']
+        filepath = os.path.join(CONFIG_DIR, filename)
+        with open(filepath, 'r') as f:
+            if file_type == 'json':
+                data = json.load(f)
+            elif file_type == 'text':
+                data = f.read()
+            globals()[cf] = data
+            f.close()
 
 #-----------------------------------------------------------------------------
 # GDriveClient class
@@ -38,6 +61,7 @@ class GDriveClient(object):
     loaded = False
 
     def __init__(self, client_secret_path=''):
+        config_load()
         self._set_secret_file_path(client_secret_path=client_secret_path)
 
     def login(self):
@@ -71,7 +95,7 @@ class GDriveClient(object):
         payload = file.getvalue()
         return payload
 
-    def _query_contents(self, qry_stm='', query_alias='', **args):
+    def query_contents(self, qry_stm='', query_alias='', **args):
         if not qry_stm:
             qry_stm = self._get_query_stm(query_alias, **args)
         response = self.service.files().list(
@@ -89,6 +113,12 @@ class GDriveClient(object):
         elif query_alias == 'files_in_folder':
             qry = "'" + args['folder_id'] + "' in parents"
             qry = qry + " and " + QUERY_OPERATORS['isnota_folder']
+        elif query_alias == 'native_files_in_folder':
+            qry = "'" + args['folder_id'] + "' in parents"
+            qry = qry + " and " + QUERY_OPERATORS['isa_native']
+        elif query_alias == 'non_native_files_in_folder':
+            qry = "'" + args['folder_id'] + "' in parents"
+            qry = qry + " and " + QUERY_OPERATORS['isnota_native_file']
         elif query_alias == 'folders_in_folder':
             qry = "'" + args['folder_id'] + "' in parents"
             qry = qry + " and " + QUERY_OPERATORS['isa_folder']

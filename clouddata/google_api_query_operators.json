@@ -1,0 +1,10 @@
+{
+    "isa_folder": "mimeType='application/vnd.google-apps.folder'",
+    "isnota_folder": "mimeType!='application/vnd.google-apps.folder'",
+    "isa_shortcut": "mimeType='application/vnd.google-apps.shortcut'",
+    "isnota_shortcut": "mimeType!='application/vnd.google-apps.shortcut'",
+    "isa_thirdparty": "mimeType='application/vnd.google-apps.drive-sdk'",
+    "isnota_thirdparty": "mimeType!='application/vnd.google-apps.drive-sdk'",
+    "isa_native": "mimeType contains 'application/vnd.google-apps.' and mimeType!='application/vnd.google-apps.folder' and mimeType!='application/vnd.google-apps.shortcut' and mimeType!='application/vnd.google-apps.drive-sdk'",
+    "isnota_native_file": "not mimeType contains 'application/vnd.google-apps.'"
+}

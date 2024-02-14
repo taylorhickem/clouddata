@@ -6,10 +6,12 @@ from clouddata.gdrive import GDriveClient
 TESTS = [
     'test_001_gdrive_login',
     'test_002_list_subfolders',
-    'test_003_list_files_in_folder'
+    'test_003_list_files_in_folder',
+    'test_004_list_native_files_in_folder'
+    'test_005_list_non_native_files_in_folder'
 ]
 L0_FOLDER = '03 Finances'
-LEAF_FOLDER_ID = '1fgQzL-q2pSwV4LAKBI-0shbQ7jalTLCF'
+LEAF_FOLDER_ID = '1TsMGximJs_k2ip-D7rXrLTZJvIfRI1xD'
 TEST_RESULTS = {}
 gdclient = None
 
@@ -104,6 +106,62 @@ def test_003_list_files_in_folder():
                 }
         except Exception as e:
             errors = f'ERROR. Failed to fetch folder files. {str(e)}'
+    else:
+        errors = 'GDrive client not loaded.'
+    test_result['success'] = test_success
+    if data:
+        test_result['data'] = data
+    if errors:
+        test_result['errors'] = errors
+    return test_result
+
+
+def test_004_list_native_files_in_folder():
+    query_alias = 'native_files_in_folder'
+    test_result = {}
+    test_success = False
+    data = {}
+    errors = ''
+    client_login()
+    if gdclient:
+        try:
+            files = gdclient.query_contents(query_alias=query_alias, folder_id=LEAF_FOLDER_ID)
+            test_success = len(files) > 0
+            if test_success:
+                data = {
+                    'folder_id': LEAF_FOLDER_ID,
+                    'files': files
+                }
+        except Exception as e:
+            errors = f'ERROR. Failed to fetch native folder files. {str(e)}'
+    else:
+        errors = 'GDrive client not loaded.'
+    test_result['success'] = test_success
+    if data:
+        test_result['data'] = data
+    if errors:
+        test_result['errors'] = errors
+    return test_result
+
+
+def test_005_list_non_native_files_in_folder():
+    query_alias = 'non_native_files_in_folder'
+    test_result = {}
+    test_success = False
+    data = {}
+    errors = ''
+    client_login()
+    if gdclient:
+        try:
+            files = gdclient.query_contents(query_alias=query_alias, folder_id=LEAF_FOLDER_ID)
+            test_success = len(files) > 0
+            if test_success:
+                data = {
+                    'folder_id': LEAF_FOLDER_ID,
+                    'files': files
+                }
+        except Exception as e:
+            errors = f'ERROR. Failed to fetch native folder files. {str(e)}'
     else:
         errors = 'GDrive client not loaded.'
     test_result['success'] = test_success
