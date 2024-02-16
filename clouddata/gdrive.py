@@ -42,9 +42,19 @@ DIR_CONFIG_DEFAULT = {
     'native_files': [],
     'non_native_files': []
 }
+BUILT_IN_QUERIES = [
+    'folder_contents',
+    'files_in_folder',
+    'native_files_in_folder',
+    'non_native_files_in_folder',
+    'folders_in_folder',
+    'folders_only',
+    'files_only'
+]
 QUERY_OPERATORS = {}
 API_PARAMETERS = {}
 DRIVE_PARAMETERS = {}
+
 
 #-----------------------------------------------------------------------------
 # config data
@@ -133,28 +143,31 @@ class GDriveClient(object):
 
     @staticmethod
     def _get_query_stm(query_alias, **args):
-        mime_type_field = DRIVE_PARAMETERS['mime_type']
-        qry = ''
-        if query_alias == 'folder_contents':
-            qry = "'" + args['folder_id'] + "' in parents"
-        elif query_alias == 'files_in_folder':
-            qry = "'" + args['folder_id'] + "' in parents"
-            qry = qry + " and " + QUERY_OPERATORS['isnota_folder']
-        elif query_alias == 'native_files_in_folder':
-            qry = "'" + args['folder_id'] + "' in parents"
-            qry = qry + " and " + QUERY_OPERATORS['isa_native']
-        elif query_alias == 'non_native_files_in_folder':
-            qry = "'" + args['folder_id'] + "' in parents"
-            qry = qry + " and " + QUERY_OPERATORS['isnota_native_file']
-        elif query_alias == 'folders_in_folder':
-            qry = "'" + args['folder_id'] + "' in parents"
-            qry = qry + " and " + QUERY_OPERATORS['isa_folder']
-        elif query_alias == 'folders_only':
-            qry = QUERY_OPERATORS['isa_folder']
-        elif query_alias == 'files_only':
-            qry = QUERY_OPERATORS['isnota_folder']
-        if 'mime_type' in args:
-            qry = qry + f" and {mime_type_field}='" + args['mime_type'] + "'"
+        if query_alias in BUILT_IN_QUERIES:
+            mime_type_field = DRIVE_PARAMETERS['mime_type']
+            qry = ''
+            if query_alias == 'folder_contents':
+                qry = "'" + args['folder_id'] + "' in parents"
+            elif query_alias == 'files_in_folder':
+                qry = "'" + args['folder_id'] + "' in parents"
+                qry = qry + " and " + QUERY_OPERATORS['isnota_folder']
+            elif query_alias == 'native_files_in_folder':
+                qry = "'" + args['folder_id'] + "' in parents"
+                qry = qry + " and " + QUERY_OPERATORS['isa_native']
+            elif query_alias == 'non_native_files_in_folder':
+                qry = "'" + args['folder_id'] + "' in parents"
+                qry = qry + " and " + QUERY_OPERATORS['isnota_native_file']
+            elif query_alias == 'folders_in_folder':
+                qry = "'" + args['folder_id'] + "' in parents"
+                qry = qry + " and " + QUERY_OPERATORS['isa_folder']
+            elif query_alias == 'folders_only':
+                qry = QUERY_OPERATORS['isa_folder']
+            elif query_alias == 'files_only':
+                qry = QUERY_OPERATORS['isnota_folder']
+            if 'mime_type' in args:
+                qry = qry + f" and {mime_type_field}='" + args['mime_type'] + "'"
+        else:
+            raise ValueError(f'invalid query_alias {query_alias}. Available aliases {BUILT_IN_QUERIES}')
         return qry
 
     def get_folder_id(self, folder_name):
