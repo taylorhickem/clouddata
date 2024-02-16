@@ -31,6 +31,8 @@ service to integrate cloud data providers
 
 #### client login
 ```
+from clouddata.gdrive import GDriveClient
+...
 gdclient = GDriveClient()
 gdclient.login()
 ```
@@ -44,11 +46,6 @@ At construction, the `GDriveClient` class instance will look for this file to au
 - built-in query
 - custom query
  
-```
-L0_FOLDER = '03 Finances'
-LEAF_FOLDER_ID = '1TsMGximJs_k2ip-D7rXrLTZJvIfRI1xD'
-LEAF_FOLDER_NAME = '05 kpi_records'
-```
 
 [video demo: browse GDrive files and folders](https://taylorhickem-media.s3.ap-southeast-1.amazonaws.com/videos/roles/life_hacks/projects/2024001_gdrive_to_s3/clouddata_demo.mp4)
 get folder_id from folder_name
