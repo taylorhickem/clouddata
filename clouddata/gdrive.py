@@ -9,6 +9,7 @@
 import io
 import os
 import json
+import datetime as dt
 from httplib2 import Http
 from oauth2client.service_account import ServiceAccountCredentials
 from googleapiclient.discovery import build
@@ -21,24 +22,29 @@ from googleapiclient.http import MediaIoBaseDownload
 SCOPES = ['https://www.googleapis.com/auth/drive']
 CLIENT_SECRET_DEFAULT = 'client_secret.json'
 ordRef = {'A': 65}
-FIELDS_DEFAULT = 'nextPageToken, files(kind, mimeType, id, name, modifiedTime)'
+FIELDS_DEFAULT = 'nextPageToken, files(kind, {mime_type}, id, name, {last_modified})'
 MODIFIED_DATE_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
 CONFIG_DIR = ''
 CONFIG_FILES = {
     'QUERY_OPERATORS': {
         'file_type': 'json',
         'filename': 'google_api_query_operators.json'
+    },
+    'API_PARAMETERS': {
+        'file_type': 'json',
+        'filename': 'google_api_parameters.json'
     }
 }
 DIR_CONFIG_DEFAULT = {
     'name': '',
-    'modifiedTime': '',
+    'last_modified': '',
     'folders': [],
     'native_files': [],
     'non_native_files': []
 }
 QUERY_OPERATORS = {}
-
+API_PARAMETERS = {}
+DRIVE_PARAMETERS = {}
 
 #-----------------------------------------------------------------------------
 # config data
@@ -58,6 +64,14 @@ def config_load():
                 data = f.read()
             globals()[cf] = data
             f.close()
+    _set_api_parameters()
+
+
+def _set_api_parameters():
+    global FIELDS_DEFAULT, DRIVE_PARAMETERS
+    DRIVE_PARAMETERS = [api['parameters'] for api in API_PARAMETERS['apis'] if api['api'] == 'drive'][0]
+    FIELDS_DEFAULT = FIELDS_DEFAULT.format(**DRIVE_PARAMETERS)
+
 
 #-----------------------------------------------------------------------------
 # GDriveClient class
@@ -119,6 +133,7 @@ class GDriveClient(object):
 
     @staticmethod
     def _get_query_stm(query_alias, **args):
+        mime_type_field = DRIVE_PARAMETERS['mime_type']
         qry = ''
         if query_alias == 'folder_contents':
             qry = "'" + args['folder_id'] + "' in parents"
@@ -139,7 +154,7 @@ class GDriveClient(object):
         elif query_alias == 'files_only':
             qry = QUERY_OPERATORS['isnota_folder']
         if 'mime_type' in args:
-            qry = qry + " and mimeType='" + args['mime_type'] + "'"
+            qry = qry + f" and {mime_type_field}='" + args['mime_type'] + "'"
         return qry
 
     def get_folder_id(self, folder_name):
@@ -153,7 +168,10 @@ class GDriveClient(object):
         return folder_id
 
     def get_directory_config(self, folder_name, folder_id=''):
+        last_modified_field = DRIVE_PARAMETERS['last_modified']
         config = DIR_CONFIG_DEFAULT.copy()
+        del config['last_modified']
+        config[last_modified_field] = ''
         config['name'] = folder_name
 
         if folder_id == '':
@@ -167,8 +185,8 @@ class GDriveClient(object):
         config['native_files'] = native_files
         config['non_native_files'] = non_native_files
 
+        sub_configs = []
         if subfolders:
-            sub_configs = []
             for s in subfolders:
                 subfolder_id = s['id']
                 subfolder_name = s['name']
@@ -176,9 +194,15 @@ class GDriveClient(object):
                 sub_configs.append(sub_config)
             config['folders'] = sub_configs
 
-        #modified_times = []
-        #if native_files:
-        #    native_mt = [f['modifiedTime'] for f in native_files]
+        modified_times = []
+        for files in [native_files, non_native_files, sub_configs]:
+            max_date = get_max_date_from_items(files, date_key=last_modified_field)
+            if max_date:
+                modified_times.append(max_date)
+        if modified_times:
+            max_date = max(modified_times)
+        if max_date:
+            config[last_modified_field] = dt.datetime.strftime(max_date, MODIFIED_DATE_FORMAT)
 
         return config
 
@@ -282,6 +306,16 @@ class GDriveClient(object):
             parent_ids = response['parents']
         return parent_ids
 
+
+def get_max_date_from_items(items, date_key='modifiedTime', date_format=MODIFIED_DATE_FORMAT):
+    max_date = None
+    if items:
+        timestamps = [i[date_key] for i in items if i[date_key]]
+        if timestamps:
+            max_date = max([
+                dt.datetime.strptime(t, MODIFIED_DATE_FORMAT)
+                for t in timestamps])
+    return max_date
 
 #-----------------------------------------------------------------------------
 # END
