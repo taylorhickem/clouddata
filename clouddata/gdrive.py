@@ -7,11 +7,14 @@
 # import dependencies
 #-----------------------------------------------------------------------------
 import io
+import shutil
+import zipfile
 import os
 import json
 import datetime as dt
 from httplib2 import Http
 from oauth2client.service_account import ServiceAccountCredentials
+from googleapiclient.errors import HttpError
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
@@ -22,9 +25,12 @@ from googleapiclient.http import MediaIoBaseDownload
 SCOPES = ['https://www.googleapis.com/auth/drive']
 CLIENT_SECRET_DEFAULT = 'client_secret.json'
 ordRef = {'A': 65}
-FIELDS_DEFAULT = 'nextPageToken, files(kind, {mime_type}, id, name, {last_modified})'
+BYTES_PER_MB = 1000000
+JSON_INDENT = 4
+FIELDS_DEFAULT = 'nextPageToken, files(kind, {mime_type}, id, name, parents, {last_modified}, {size_bytes})'
 MODIFIED_DATE_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
 CONFIG_DIR = ''
+DIRECTORY_CONFIG_FILENAME = 'directory.json'
 CONFIG_FILES = {
     'QUERY_OPERATORS': {
         'file_type': 'json',
@@ -38,6 +44,8 @@ CONFIG_FILES = {
 DIR_CONFIG_DEFAULT = {
     'name': '',
     'last_modified': '',
+    'size_mb': '',
+    'size_bytes': '',
     'folders': [],
     'native_files': [],
     'non_native_files': []
@@ -114,20 +122,6 @@ class GDriveClient(object):
         )
         return credentials
 
-    def download_file(self, file_id):
-        #returns the file as a bytes type
-        payload = False
-        request = self.service.files().get_media(fileId=file_id)
-        file = io.BytesIO()
-        downloader = MediaIoBaseDownload(file, request)
-        done = False
-        while done is False:
-            status, done = downloader.next_chunk()
-            #print(F'Download {int(status.progress() * 100)}.')
-
-        payload = file.getvalue()
-        return payload
-
     def query_contents(self, qry_stm='', query_alias='', fields='', **args):
         if not fields:
             fields = FIELDS_DEFAULT
@@ -179,45 +173,6 @@ class GDriveClient(object):
         if found_folder:
             folder_id = contents[0]['id']
         return folder_id
-
-    def get_directory_config(self, folder_name, folder_id=''):
-        last_modified_field = DRIVE_PARAMETERS['last_modified']
-        config = DIR_CONFIG_DEFAULT.copy()
-        del config['last_modified']
-        config[last_modified_field] = ''
-        config['name'] = folder_name
-
-        if folder_id == '':
-            folder_id = self.get_folder_id(folder_name)
-            config['id'] = folder_id
-
-        subfolders = self.get_subfolders(folder_id=folder_id)
-        native_files = self.get_native_files_in_folder(folder_id=folder_id)
-        non_native_files = self.get_non_native_files_in_folder(folder_id=folder_id)
-
-        config['native_files'] = native_files
-        config['non_native_files'] = non_native_files
-
-        sub_configs = []
-        if subfolders:
-            for s in subfolders:
-                subfolder_id = s['id']
-                subfolder_name = s['name']
-                sub_config = self.get_directory_config(subfolder_name, folder_id=subfolder_id)
-                sub_configs.append(sub_config)
-            config['folders'] = sub_configs
-
-        modified_times = []
-        for files in [native_files, non_native_files, sub_configs]:
-            max_date = get_max_date_from_items(files, date_key=last_modified_field)
-            if max_date:
-                modified_times.append(max_date)
-        if modified_times:
-            max_date = max(modified_times)
-        if max_date:
-            config[last_modified_field] = dt.datetime.strftime(max_date, MODIFIED_DATE_FORMAT)
-
-        return config
 
     def get_files_in_folder(self, folder_name='', folder_id='',
                             include_subfolders=False,
@@ -273,7 +228,7 @@ class GDriveClient(object):
             contents = self.query_contents(query_alias=query_alias, **args)
         return contents
 
-    def download_files_in_folder(self, folder_name, folder_id, mime_type=None):
+    def download_files_in_folder_as_bytes(self, folder_name, folder_id, mime_type=None):
         payloads = []
         names = []
         file_references = self.get_files_in_folder(
@@ -282,9 +237,12 @@ class GDriveClient(object):
             mime_type=mime_type)
         if len(file_references) > 0:
             for f in file_references:
-                payload = self.download_file(f['id'])
-                payloads.append(payload)
+                payload, errors = self.file_download(f['id'], f['name'], return_bytes=True)
                 names.append(f['name'])
+                if not errors:
+                    payloads.append(payload)
+                else:
+                    payloads.append(errors)
 
         files = dict(zip(names, payloads))
         return files
@@ -319,16 +277,218 @@ class GDriveClient(object):
             parent_ids = response['parents']
         return parent_ids
 
+    def get_directory_config(self, folder_name, folder_id='', save_to_file=False, filepath=''):
+        config = DIR_CONFIG_DEFAULT.copy()
+        config['name'] = folder_name
+
+        for f in [
+            'last_modified',
+            'size_bytes'
+        ]:
+            del config[f]
+            config[DRIVE_PARAMETERS[f]] = ''
+
+        if folder_id == '':
+            folder_id = self.get_folder_id(folder_name)
+            config['id'] = folder_id
+
+        subfolders = self.get_subfolders(folder_id=folder_id)
+        native_files = self.get_native_files_in_folder(folder_id=folder_id)
+        non_native_files = self.get_non_native_files_in_folder(folder_id=folder_id)
+
+        config['native_files'] = native_files
+        config['non_native_files'] = non_native_files
+
+        sub_configs = []
+        if subfolders:
+            for s in subfolders:
+                subfolder_id = s['id']
+                subfolder_name = s['name']
+                sub_config = self.get_directory_config(subfolder_name, folder_id=subfolder_id)
+                sub_configs.append(sub_config)
+            config['folders'] = sub_configs
+
+        items = [native_files, non_native_files, sub_configs]
+        max_date = get_max_date_from_items(items, date_key=DRIVE_PARAMETERS['last_modified'])
+        if max_date:
+            config[DRIVE_PARAMETERS['last_modified']] = dt.datetime.strftime(max_date, MODIFIED_DATE_FORMAT)
+
+        size_bytes = get_size_bytes_from_items(items, size_key=DRIVE_PARAMETERS['size_bytes'])
+        if size_bytes:
+            config[DRIVE_PARAMETERS['size_bytes']] = str(size_bytes)
+            config['size_mb'] = str(size_bytes/BYTES_PER_MB)
+
+        if save_to_file:
+            if not filepath:
+                filepath = DIRECTORY_CONFIG_FILENAME
+            write_to_file(config, filepath, 'json')
+            return filepath
+        else:
+            return config
+
+    def file_download(self, file_id, filename, dir_path='', return_bytes=False):
+        download_success = False
+        file = io.BytesIO()
+        errors = ''
+
+        try:
+            request = self.service.files().get_media(fileId=file_id)
+            downloader = MediaIoBaseDownload(file, request)
+            done = False
+            while done is False:
+                status, done = downloader.next_chunk()
+
+        except HttpError as error:
+            errors = f'ERROR. error when downloading file: {filename}. {error}'
+            file = None
+
+        if file:
+            if return_bytes:
+                return file.getvalue()
+            else:
+                filepath = os.path.join(dir_path, filename)
+                try:
+                    if dir_path:
+                        if not os.path.exists(dir_path):
+                            os.makedirs(dir_path)
+                    with open(filepath, 'wb') as f:
+                        f.write(file.getvalue())
+                        file.close()
+                        f.close()
+                    download_success = True
+                except Exception as e:
+                    errors = f'ERROR. IO error writing bytes to file {filepath}. {str(e)}'
+                return download_success, errors
+        else:
+            return None, errors
+
+    def directory_download(self, folder_name, folder_id='', dir_path='',
+                           include_native=False, include_non_native=True,
+                           zip_filename='', as_zip=True,
+                           config={}):
+        print(f'downloading contents from folder {folder_name} ...')
+        errors = ''
+        download_success = False
+        contents_path = os.path.join(dir_path, folder_name)
+        if not config:
+            config = self.get_directory_config(
+                folder_name,
+                folder_id=folder_id
+            )
+        if not os.path.exists(contents_path):
+            os.makedirs(contents_path)
+
+        if config['folders']:
+            for sub_config in config['folders']:
+                self.directory_download(
+                    folder_name=sub_config['name'],
+                    dir_path=contents_path,
+                    include_native=include_native,
+                    include_non_native=include_non_native,
+                    as_zip=False,
+                    config=sub_config
+                )
+
+        if include_native and config['native_files']:
+            native_file_names = [f['name'] for f in config['native_files']]
+            print(f'WARNING: file download for native Google files not supported. files excluded: {native_file_names}')
+
+        if include_non_native and config['non_native_files']:
+            for file in config['non_native_files']:
+                self.file_download(
+                    file_id=file['id'],
+                    filename=file['name'],
+                    dir_path=contents_path,
+                    return_bytes=False
+                )
+
+        if as_zip:
+            if not zip_filename:
+                zip_filename = f'{contents_path}.zip'
+            directory_zip(contents_path, zip_filename=zip_filename, dir_cleanup=True)
+
+        return download_success, errors
+
 
 def get_max_date_from_items(items, date_key='modifiedTime', date_format=MODIFIED_DATE_FORMAT):
     max_date = None
     if items:
-        timestamps = [i[date_key] for i in items if i[date_key]]
-        if timestamps:
-            max_date = max([
-                dt.datetime.strptime(t, MODIFIED_DATE_FORMAT)
-                for t in timestamps])
+        if isinstance(items[0], list): #list of lists
+            max_dates = []
+            for sub_items in items:
+                items_date = get_max_date_from_items(sub_items, date_key=date_key)
+                if items_date:
+                    max_dates.append(items_date)
+            if max_dates:
+                max_date = max(max_dates)
+        else:
+            timestamps = [i[date_key] for i in items if i[date_key]]
+            if timestamps:
+                max_date = max([
+                    dt.datetime.strptime(t, date_format)
+                    for t in timestamps])
     return max_date
+
+
+def get_size_bytes_from_items(items, size_key='size'):
+    size_bytes = None
+    if items:
+        if isinstance(items[0], list): #list of lists
+            sizes = []
+            for sub_items in items:
+                items_size = get_size_bytes_from_items(sub_items, size_key=size_key)
+                if items_size:
+                    sizes.append(items_size)
+            if sizes:
+                size_bytes = sum(sizes)
+        else:
+            try:
+                sizes = [i.get(size_key, '') for i in items if i.get(size_key, '')]
+            except Exception as e:
+                print(f"ERROR. Error when attempting to extract file property 'size' from {items}")
+                raise e
+            if sizes:
+                size_bytes = sum([int(b) for b in sizes])
+    return size_bytes
+
+
+def write_to_file(data, filepath, file_type):
+    with open(filepath, 'w') as f:
+        if file_type == 'json':
+            json.dump(data, f, indent=JSON_INDENT)
+        elif file_type == 'text':
+            f.write(data)
+        f.close()
+
+
+def directory_zip(dir_path, zip_filename='', dir_cleanup=False):
+    if not zip_filename:
+        zip_filename = f'{dir_path}.zip'
+
+    #zip the files
+    zip_bytes = io.BytesIO()
+    with zipfile.ZipFile(zip_bytes, 'w') as zipf:
+        for root, dirs, files in os.walk(dir_path):
+            for folder in dirs:
+                folder_path = os.path.join(root, folder)
+                zipf.write(
+                    folder_path,
+                    os.path.relpath(folder_path, dir_path)
+                )
+            for f in files:
+                file_path = os.path.join(root, f)
+                zipf.write(
+                    file_path,
+                    os.path.relpath(file_path, dir_path)
+                )
+
+    with open(zip_filename, 'wb') as f:
+        f.write(zip_bytes.getvalue())
+        f.close()
+        zip_bytes.close()
+
+    if dir_cleanup:
+        shutil.rmtree(dir_path, ignore_errors=True)
 
 #-----------------------------------------------------------------------------
 # END

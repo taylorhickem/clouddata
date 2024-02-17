@@ -4,7 +4,8 @@
       "api": "drive",
       "parameters": {
           "last_modified": "modifiedTime",
-          "mime_type": "mimeType"
+          "mime_type": "mimeType",
+          "size_bytes": "size"
       }
     }
   ]

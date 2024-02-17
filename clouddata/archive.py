@@ -19,7 +19,7 @@ METADATA_DEFAULT = {
     'account_id': '',
     'directory_path': '',
     'directory_url': '',
-    'size_MB': '',
+    'size_mb': '',
     'directory_file': DIRECTORY_FILE_DEFAULT,
     'data_file': DATA_FILE_DEFAULT,
     'security_class': '',
@@ -73,9 +73,20 @@ class DirectoryArchive(object):
             if k in kwargs:
                 self.metadata[k] = kwargs[k]
 
+    def _parse_directory(self):
+        if not self.directory:
+            if os.path.exists(self.directory_file):
+                with open(self.directory_file, 'r') as f:
+                    self.directory = json.load(f)
+                    f.close()
+        if self.directory:
+            self.size_mb = self.directory['size_mb']
+        self._metadata_update()
+
     def save(self):
         """save archive to local files to path_local/archive_id
         """
+        self._parse_directory()
         archive_dir = os.path.join(self.path_local, self.id)
         if not os.path.exists(archive_dir):
             os.makedirs(archive_dir)
