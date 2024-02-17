@@ -1,6 +1,6 @@
 import os
 import json
-from clouddata import integrations
+from clouddata.integrations import GDriveToS3
 from clouddata.gdrive import GDriveClient
 from clouddata.archive import DirectoryArchive
 
@@ -14,16 +14,20 @@ TESTS = [
     'test_006_get_leaf_directory_config',
     'test_007_get_L0_directory_config',
     'test_008_leaf_folder_archive',
-    'test_009_archive_create'
-    'test_010_file_download'
+    'test_009_archive_create',
+    'test_010_file_download',
+    'test_011_leaf_directory_archive'
 ]
 L0_FOLDER = '03 Finances'
-LEAF_FOLDER_ID = '0Bzcklfmy0P60QjdqQ3NqOFZvQ00'
-LEAF_FOLDER_NAME = '08 Interactive Brokers'
-#LEAF_FOLDER_ID = '1TsMGximJs_k2ip-D7rXrLTZJvIfRI1xD'
-#LEAF_FOLDER_NAME = '05 kpi_records'
+#LEAF_FOLDER_ID = '0Bzcklfmy0P60QjdqQ3NqOFZvQ00'
+#LEAF_FOLDER_NAME = '08 Interactive Brokers'
+LEAF_FOLDER_ID = '1TsMGximJs_k2ip-D7rXrLTZJvIfRI1xD'
+LEAF_FOLDER_NAME = '05 kpi_records'
 FILE_ID = '1GblQkHIc2bTQAoxfxfCx-DI8QvB4ai5h'
 FILENAME = 'KPIRcds.csv'
+ARCHIVE_BUCKET = 'taylorhickem-datadetective-archive-standard'
+ARCHIVE_PREFIX = 'archives'
+GOOGLE_ACCOUNT_ID = 'taylor.hickem@gmail.com'
 TEST_RESULTS = {}
 gdclient = None
 
@@ -240,26 +244,27 @@ def test_008_leaf_folder_archive():
     errors = ''
     client_login()
     if gdclient:
-        #try:
-        config_path = gdclient.get_directory_config(
-            directory_name, folder_id=LEAF_FOLDER_ID, save_to_file=True)
-        test_success = len(config_path) > 0
-        if test_success:
-            test_result['directory_config_file'] = config_path
-        #except Exception as e:
-        #    errors = f'ERROR. Failed to fetch directory config. {str(e)}'
+        try:
+            config_path = gdclient.get_directory_config(
+                directory_name, folder_id=LEAF_FOLDER_ID, save_to_file=True)
+            test_success = len(config_path) > 0
+            if test_success:
+                test_result['directory_config_file'] = config_path
+        except Exception as e:
+            errors = f'ERROR. Failed to fetch directory config. {str(e)}'
         if test_success:
             with open(config_path, 'r') as f:
                 config = json.load(f)
                 f.close()
-            #try:
-            payload_path, errors = gdclient.directory_download(directory_name,
-                folder_id=LEAF_FOLDER_ID, zip_filename='data.zip', as_zip=True, config=config)
-            test_success = len(errors) == 0
-            if test_success:
-                test_result['directory_data_file'] = payload_path
-            #except Exception as e:
-            #    errors = f'ERROR. Failed to download directory. {str(e)}'
+            try:
+                payload_path, errors = gdclient.directory_download(directory_name,
+                    folder_id=LEAF_FOLDER_ID, zip_filename='data.zip', as_zip=True,
+                    config=config, print_updates=True)
+                test_success = len(errors) == 0
+                if test_success:
+                    test_result['directory_data_file'] = payload_path
+            except Exception as e:
+                errors = f'ERROR. Failed to download directory. {str(e)}'
         if test_success:
             try:
                 archive = DirectoryArchive(
@@ -335,6 +340,44 @@ def test_010_file_download():
             errors = f'ERROR. Failed to download file {filename}. {str(e)}'
     else:
         errors = 'GDrive client not loaded.'
+    test_result['success'] = test_success
+    if errors:
+        test_result['errors'] = errors
+    return test_result
+
+
+def test_011_leaf_directory_archive():
+    google_account_id = GOOGLE_ACCOUNT_ID
+    s3_bucket = ARCHIVE_BUCKET
+    s3_prefix = ARCHIVE_PREFIX
+    gdrive_folder = LEAF_FOLDER_NAME
+    folder_id = LEAF_FOLDER_ID
+    archive_tag = 'test'
+    test_result = {}
+    migrator = None
+    test_success = False
+    errors = ''
+    try:
+        migrator = GDriveToS3()
+        migrator.login()
+        test_success = True
+    except Exception as e:
+        errors = f'ERROR. GDriveToS3 migration client failed to load. {str(e)}'
+    if test_success:
+        try:
+            archive_success, errors = migrator.directory_archive_to_s3(
+                gdrive_folder,s3_bucket,
+                gdrive_folder_id=folder_id,
+                google_account_id=google_account_id,
+                bucket_prefix=s3_prefix,
+                archive_tag=archive_tag,
+                status_updates=True
+            )
+            test_success = archive_success
+            if not test_success:
+                errors = f'ERROR. Failed to archive gdrive directory {gdrive_folder}. {errors}'
+        except Exception as e:
+            errors = f'ERROR. Failed to archive gdrive directory {gdrive_folder}. {str(e)}'
     test_result['success'] = test_success
     if errors:
         test_result['errors'] = errors

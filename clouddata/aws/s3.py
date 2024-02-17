@@ -1,3 +1,4 @@
+import os
 import boto3
 
 
@@ -19,6 +20,26 @@ class S3Client(object):
 
     def __exit__(self):
         client_logout()
+
+    def upload_file(self, bucket_name, filename, dir_local='', dir_remote='',
+                    extra_args=None, callback=None, config=None
+        ):
+        if dir_remote:
+            key = f'{dir_remote}/{filename}'
+        else:
+            key = filename
+        if dir_local:
+            filepath = os.path.join(dir_local, filename)
+        else:
+            filepath = filename
+        self.client().upload_file(
+            Filename=filepath,
+            Bucket=bucket_name,
+            Key=key,
+            ExtraArgs=extra_args,
+            Callback=callback,
+            Config=config
+        )
 
 
 def client_login():

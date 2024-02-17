@@ -365,10 +365,12 @@ class GDriveClient(object):
     def directory_download(self, folder_name, folder_id='', dir_path='',
                            include_native=False, include_non_native=True,
                            zip_filename='', as_zip=True,
-                           config={}):
-        print(f'downloading contents from folder {folder_name} ...')
+                           config={},
+                           print_updates=False):
+        if print_updates:
+            print(f'downloading contents from folder {folder_name} ...')
         errors = ''
-        download_success = False
+        download_success = True
         contents_path = os.path.join(dir_path, folder_name)
         if not config:
             config = self.get_directory_config(
@@ -380,14 +382,19 @@ class GDriveClient(object):
 
         if config['folders']:
             for sub_config in config['folders']:
-                self.directory_download(
-                    folder_name=sub_config['name'],
-                    dir_path=contents_path,
-                    include_native=include_native,
-                    include_non_native=include_non_native,
-                    as_zip=False,
-                    config=sub_config
-                )
+                if download_success:
+                    try:
+                        self.directory_download(
+                            folder_name=sub_config['name'],
+                            dir_path=contents_path,
+                            include_native=include_native,
+                            include_non_native=include_non_native,
+                            as_zip=False,
+                            config=sub_config
+                        )
+                    except Exception as e:
+                        download_success = False
+                        errors = str(e)
 
         if include_native and config['native_files']:
             native_file_names = [f['name'] for f in config['native_files']]
@@ -395,14 +402,19 @@ class GDriveClient(object):
 
         if include_non_native and config['non_native_files']:
             for file in config['non_native_files']:
-                self.file_download(
-                    file_id=file['id'],
-                    filename=file['name'],
-                    dir_path=contents_path,
-                    return_bytes=False
-                )
+                if download_success:
+                    try:
+                        self.file_download(
+                            file_id=file['id'],
+                            filename=file['name'],
+                            dir_path=contents_path,
+                            return_bytes=False
+                        )
+                    except Exception as e:
+                        download_success = False
+                        errors = str(e)
 
-        if as_zip:
+        if download_success and as_zip:
             if not zip_filename:
                 zip_filename = f'{contents_path}.zip'
             directory_zip(contents_path, zip_filename=zip_filename, dir_cleanup=True)
