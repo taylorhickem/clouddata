@@ -6,7 +6,7 @@ class GDriveToS3(object):
     s3client = None
     gdclient = None
     connected = False
-    
+
     def __init__(self):
         self.s3client = S3Client()
         self.gdclient = gdrive.GDriveClient()
