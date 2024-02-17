@@ -1,6 +1,7 @@
 import json
 from clouddata import integrations
 from clouddata.gdrive import GDriveClient
+from clouddata.archive import DirectoryArchive
 
 
 TESTS = [
@@ -10,7 +11,9 @@ TESTS = [
     'test_004_list_native_files_in_folder'
     'test_005_list_non_native_files_in_folder',
     'test_006_get_leaf_directory_config',
-    'test_007_get_L0_directory_config'
+    'test_007_get_L0_directory_config',
+    'test_008_leaf_folder_archive',
+    'test_009_archive_create'
 ]
 L0_FOLDER = '03 Finances'
 LEAF_FOLDER_ID = '1TsMGximJs_k2ip-D7rXrLTZJvIfRI1xD'
@@ -215,6 +218,76 @@ def test_007_get_L0_directory_config():
             errors = f'ERROR. Failed to fetch directory config. {str(e)}'
     else:
         errors = 'GDrive client not loaded.'
+    test_result['success'] = test_success
+    if data:
+        test_result['data'] = data
+    if errors:
+        test_result['errors'] = errors
+    return test_result
+
+
+def test_008_leaf_folder_archive():
+    directory_name = LEAF_FOLDER_NAME
+    test_result = {}
+    test_success = False
+    data = {}
+    errors = ''
+    client_login()
+    if gdclient:
+        try:
+            config_path = gdclient.get_directory_config(
+                directory_name, folder_id=LEAF_FOLDER_ID, save_to_file=True)
+            test_success = len(config_path) > 0
+            if test_success:
+                test_result['directory_config_file'] = config_path
+        except Exception as e:
+            errors = f'ERROR. Failed to fetch directory config. {str(e)}'
+        if test_success:
+            try:
+                payload_path, errors = gdclient.directory_download(
+                    folder_id=LEAF_FOLDER_ID, filepath='data.zip')
+                test_success = len(errors) == 0
+                if test_success:
+                    test_result['directory_data_file'] = payload_path
+            except Exception as e:
+                errors = f'ERROR. Failed to download directory. {str(e)}'
+        if test_success:
+            try:
+                archive = DirectoryArchive(
+                    data_file=payload_path,
+                    directory_file=config_path,
+                    name=directory_name
+                )
+                archive.save()
+            except Exception as e:
+                errors = f'ERROR. Failed to save archive. {str(e)}'
+    else:
+        errors = 'GDrive client not loaded.'
+    test_result['success'] = test_success
+    if errors:
+        test_result['errors'] = errors
+    return test_result
+
+
+def test_009_archive_create():
+    data_file = 'data.zip'
+    directory_file = 'directory.json'
+    directory_name = 'test'
+    test_result = {}
+    test_success = False
+    data = {}
+    errors = ''
+    try:
+        archive = DirectoryArchive(
+            data_file=data_file,
+            directory_file=directory_file,
+            name=directory_name
+        )
+        archive.save()
+        data = archive.id
+        test_success = True
+    except Exception as e:
+        errors = f'ERROR. Failed to save archive. {str(e)}'
     test_result['success'] = test_success
     if data:
         test_result['data'] = data

@@ -1,8 +1,11 @@
 import os
+import json
 import datetime as dt
+
 
 DATA_FILE_DEFAULT = 'data.zip'
 DIRECTORY_FILE_DEFAULT = 'directory.json'
+METADATA_FILE = 'metadata.json'
 ARCHIVE_ID_DEFAULT = 'archive_{timestamp}'
 ARCHIVE_ID_NAMED = 'archive_{timestamp}_{name}'
 TIMESTAMP_FORMAT_ARCHIVE_ID = '%Y%m%d%H%M'
@@ -69,6 +72,24 @@ class DirectoryArchive(object):
                 self.metadata[k] = self.__dict__[k]
             if k in kwargs:
                 self.metadata[k] = kwargs[k]
+
+    def save(self):
+        """save archive to local files to path_local/archive_id
+        """
+        archive_dir = os.path.join(self.path_local, self.id)
+        if not os.path.exists(archive_dir):
+            os.makedirs(archive_dir)
+
+        metadata = self.metadata.copy()
+        metadata['directory_file'] = DIRECTORY_FILE_DEFAULT
+        metadata['data_file'] = DATA_FILE_DEFAULT
+        with open(METADATA_FILE, 'w') as f:
+            json.dump(metadata, f, indent=2)
+            f.close()
+        os.rename(METADATA_FILE, os.path.join(archive_dir, METADATA_FILE))
+        os.rename(self.directory_file, os.path.join(archive_dir, metadata['directory_file']))
+        os.rename(self.data_file, os.path.join(archive_dir, metadata['data_file']))
+        return archive_dir
 
     def __repr__(self):
         return self.id
