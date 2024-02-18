@@ -1,0 +1,17 @@
+{
+  "tables": {
+    "data_archive": {
+      "partition_key": "id",
+      "sort_key": "",
+      "columns": {
+        "id": "str",
+        "timestamp": "datetime(%Y-%m-%d %H:%M:%S)",
+        "bucket": "str",
+        "location_path": "str",
+        "data_key": "str",
+        "tags": "str",
+        "metadata": "str"
+      }
+    }
+  }
+}

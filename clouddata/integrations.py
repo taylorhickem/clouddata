@@ -1,11 +1,24 @@
 import os
 import json
+import re
 from .aws.s3 import S3Client
 from .gdrive import GDriveClient
+from .aws.dynamodb import DynamoDBAPI
 from . import archive
 
 
 GDRIVE_SERVICE = 'google_drive'
+ARCHIVE_TABLENAME = 'data_archive'
+ARCHIVE_DB_CONFIG_FILE = 'data_archive_table_config.json'
+ARCHIVE_RECORD_DEFAULT = {
+    'id': '',
+    'timestamp': '',
+    'bucket': '',
+    'location_path': '',
+    'data_key': '',
+    'tags': [],
+    'metadata': {}
+}
 
 
 class GDriveToS3(object):
@@ -141,3 +154,119 @@ class GDriveToS3(object):
 
     def __repr__(self):
         return f'<{self.__class__} Integration object>'
+
+
+class ArchiveDB(object):
+    api = None
+    table = None
+    table_name = ARCHIVE_TABLENAME
+    db_config = {}
+    is_connected = False
+
+    def __init__(self, config_path=''):
+        self._config_load(config_path=config_path)
+        self.api = DynamoDBAPI(config=self.db_config)
+
+    def _config_load(self, config_path=''):
+        if not config_path:
+            config_path = os.path.join(os.path.dirname(__file__), ARCHIVE_DB_CONFIG_FILE)
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+            f.close()
+        self.db_config = config
+
+    def connect(self):
+        self.api.connect()
+        self.is_connected = self.api.is_connected()
+        self.table = self.api._get_table_obj(ARCHIVE_TABLENAME)
+
+    def disconnect(self):
+        if self.table:
+            self.table.unload()
+            self.table = None
+        if self.api:
+            self.api.disconnect()
+            self.api = None
+        self.is_connected = False
+
+    def __exit__(self):
+        self.disconnect()
+
+    def record_get(self, archive_id) -> dict:
+        item = self._item_get(archive_id)
+        record = self._as_record(item)
+        return record
+
+    def record_put(self, record):
+        item = self._as_item(record)
+        self._item_put(item)
+
+    def _item_get(self, archive_id) -> dict:
+        item = {}
+        keys, items = self.table.query_by_key_str_value_eq(
+            'id', archive_id)
+        if len(items) > 0:
+            item = items[0]
+        return item
+
+    def _item_put(self, item):
+        self.table.table.put_item(Item=item)
+
+    def _as_item(self, record) -> dict:
+        item = record
+        return item
+
+    def _as_record(self, item) -> dict:
+        record = item
+        return record
+
+    def record_from_metadata(self, metadata) -> dict:
+        record = ARCHIVE_RECORD_DEFAULT.copy()
+        for f in [
+            'id',
+            'timestamp'
+        ]:
+            record[f] = metadata[f]
+        archive_id = metadata['id']
+        bucket_regex = r'^s3:\/\/([^\/]+)/'
+        if metadata.get('directory_path', ''):
+            directory_path = metadata['directory_path']
+            match = re.match(bucket_regex, directory_path)
+            if match:
+                bucket_name = match.group(1)
+                record['bucket'] = bucket_name
+                if metadata.get('data_file', ''):
+                    data_file = metadata.get('data_file', '')
+                    location_path = directory_path.replace(f's3://{bucket_name}/', '')
+                    location_path = f'{location_path}{archive_id}/'
+                    record['location_path'] = location_path
+                    record['data_key'] = f'{location_path}{data_file}'
+
+        record['metadata'] = metadata
+        return record
+
+#ARCHIVE_RECORD_DEFAULT = {
+#    'id': '',
+#    'timestamp': '',
+#    'bucket': '',
+#    'location_path': '',
+#    'data_key': '',
+#    'tags': [],
+#    'metadata': {}
+#}
+
+#METADATA_DEFAULT = {
+#    'id': '',
+#    'name': '',
+#    'timestamp': '',
+#    'service_provider': '',
+#    'account_id': '',
+#    'directory_path': '',
+#    'directory_url': '',
+#    'size_mb': '',
+#    'directory_file': DIRECTORY_FILE_DEFAULT,
+#    'data_file': DATA_FILE_DEFAULT,
+#    'security_class': '',
+#    'permissions': '',
+#    'expiration_date': ''
+#}

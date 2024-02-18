@@ -1,6 +1,6 @@
 import os
 import json
-from clouddata.integrations import GDriveToS3
+from clouddata.integrations import GDriveToS3, ArchiveDB
 from clouddata.gdrive import GDriveClient
 from clouddata.archive import DirectoryArchive
 
@@ -18,7 +18,8 @@ TESTS = [
     'test_010_file_download',
     'test_011_leaf_directory_archive',
     'test_012_file_upload',
-    'test_013_file_delete'
+    'test_013_file_delete',
+    'test_014_archive_db_record_create'
 ]
 L0_FOLDER = '03 Finances'
 #LEAF_FOLDER_ID = '0Bzcklfmy0P60QjdqQ3NqOFZvQ00'
@@ -435,6 +436,56 @@ def test_013_file_delete(file_id=''):
             errors = f'ERROR. Failed to delete file {file_id}. {str(e)}'
     else:
         errors = 'GDrive client not loaded.'
+    test_result['success'] = test_success
+    if errors:
+        test_result['errors'] = errors
+    return test_result
+
+
+def test_014_archive_db_record_create():
+    data_file = 'data.zip'
+    directory_file = 'directory.json'
+    archive_name = 'test_05_kpi_records'
+    service_provider = 'google_drive'
+    google_account_id = GOOGLE_ACCOUNT_ID
+    s3_dir_path = f's3://{ARCHIVE_BUCKET}/{ARCHIVE_PREFIX}/'
+    db_client = None
+    test_result = {}
+    test_success = False
+    archive = None
+    errors = ''
+    try:
+        archive = DirectoryArchive(
+            data_file=data_file,
+            directory_file=directory_file,
+            name=archive_name,
+            service_provider=service_provider,
+            account_id=google_account_id,
+            directory_path=s3_dir_path
+        )
+        archive.save()
+        test_success = True
+    except Exception as e:
+        errors = f'ERROR. Failed to save archive. {str(e)}'
+    if test_success:
+        if archive:
+            test_result['archive'] = archive
+        try:
+            db_client = ArchiveDB()
+            db_client.connect()
+            record = db_client.record_from_metadata(archive.metadata)
+            test_success = len(record) > 0
+        except Exception as e:
+            test_success = False
+            errors = f'ERROR. Failed to create archive record from metadata. {str(e)}'
+    if test_success:
+        test_result['archive_record'] = record
+        try:
+            db_client.record_put(record)
+            test_success = True
+        except Exception as e:
+            test_success = False
+            errors = f'ERROR. Failed to put archive record to db. {str(e)}'
     test_result['success'] = test_success
     if errors:
         test_result['errors'] = errors
