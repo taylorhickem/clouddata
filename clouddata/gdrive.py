@@ -17,7 +17,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from googleapiclient.errors import HttpError
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
-
+from googleapiclient.http import MediaFileUpload
 
 #-----------------------------------------------------------------------------
 # module variables
@@ -98,6 +98,7 @@ def _set_api_parameters():
 
 class GDriveClient(object):
     client_secret_path = ''
+    user_id = ''
     service = None
     loaded = False
 
@@ -361,6 +362,52 @@ class GDriveClient(object):
                 return download_success, errors
         else:
             return None, errors
+
+    def file_upload(self, filename='', dir_path='', folder_name='',
+                    folder_id='', mime_type='', name_local=''):
+        errors = ''
+        file_id = ''
+        if name_local:
+            filepath = os.path.join(dir_path, name_local)
+        else:
+            filepath = os.path.join(dir_path, filename)
+        if folder_id == '' and folder_name:
+            folder_id = self.get_folder_id(folder_name)
+        metadata = {
+            'name': filename
+        }
+        if mime_type:
+            metadata[DRIVE_PARAMETERS['mime_type']] = mime_type
+        if folder_id:
+            metadata['parents'] = [folder_id]
+        media = MediaFileUpload(
+            filepath,
+            mimetype=mime_type
+        )
+        try:
+            file = self.service.files().create(
+                body=metadata,
+                media_body=media,
+                fields='id'
+            ).execute()
+            file_id = file.get('id')
+        except HttpError as http_error:
+            errors = f'ERROR. failed to upload file {filename}. {http_error}'
+
+        return file_id, errors
+
+    def file_delete(self, file_id):
+        errors = ''
+        delete_success = False
+        try:
+            self.service.files().delete(
+                fileId=file_id
+            ).execute()
+            delete_success = True
+        except HttpError as http_error:
+            errors = f'ERROR. failed to delete file {file_id}. {http_error}'
+
+        return delete_success, errors
 
     def directory_download(self, folder_name, folder_id='', dir_path='',
                            include_native=False, include_non_native=True,

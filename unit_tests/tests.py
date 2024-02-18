@@ -16,7 +16,9 @@ TESTS = [
     'test_008_leaf_folder_archive',
     'test_009_archive_create',
     'test_010_file_download',
-    'test_011_leaf_directory_archive'
+    'test_011_leaf_directory_archive',
+    'test_012_file_upload',
+    'test_013_file_delete'
 ]
 L0_FOLDER = '03 Finances'
 #LEAF_FOLDER_ID = '0Bzcklfmy0P60QjdqQ3NqOFZvQ00'
@@ -24,7 +26,10 @@ L0_FOLDER = '03 Finances'
 LEAF_FOLDER_ID = '1TsMGximJs_k2ip-D7rXrLTZJvIfRI1xD'
 LEAF_FOLDER_NAME = '05 kpi_records'
 FILE_ID = '1GblQkHIc2bTQAoxfxfCx-DI8QvB4ai5h'
+FILE_TO_DELETE_ID = '1havfFNQOBCeVB-INK_y5wWA5RgFjkh7h'
 FILENAME = 'KPIRcds.csv'
+FILE_MIME_TYPE = 'text/csv'
+GDRIVE_ARCHIVE_FOLDER_ID = '1DohL6tboDJIMbAqEZpEWB_DCwstgJc4H'
 ARCHIVE_BUCKET = 'taylorhickem-datadetective-archive-standard'
 ARCHIVE_PREFIX = 'archives'
 GOOGLE_ACCOUNT_ID = 'taylor.hickem@gmail.com'
@@ -378,6 +383,58 @@ def test_011_leaf_directory_archive():
                 errors = f'ERROR. Failed to archive gdrive directory {gdrive_folder}. {errors}'
         except Exception as e:
             errors = f'ERROR. Failed to archive gdrive directory {gdrive_folder}. {str(e)}'
+    test_result['success'] = test_success
+    if errors:
+        test_result['errors'] = errors
+    return test_result
+
+
+def test_012_file_upload():
+    filepath = FILENAME
+    file_id = ''
+    file = None
+    mime_type = FILE_MIME_TYPE
+    folder_id = GDRIVE_ARCHIVE_FOLDER_ID
+    test_result = {}
+    test_success = False
+    errors = ''
+    client_login()
+    if gdclient:
+        try:
+            file_id, errors = gdclient.file_upload(
+                filename=filepath,
+                folder_id=folder_id,
+                mime_type=mime_type
+            )
+            test_success = len(file_id) > 0
+            if not test_success:
+                errors = f'ERROR. Failed to upload file {filepath}. {errors}'
+        except Exception as e:
+            errors = f'ERROR. Failed to upload file {filepath}. {str(e)}'
+    else:
+        errors = 'GDrive client not loaded.'
+    if test_success:
+        test_result['file_id'] = file_id
+    test_result['success'] = test_success
+    if errors:
+        test_result['errors'] = errors
+    return test_result
+
+
+def test_013_file_delete(file_id=''):
+    if file_id == '':
+        file_id = FILE_TO_DELETE_ID
+    test_result = {}
+    test_success = False
+    errors = ''
+    client_login()
+    if gdclient:
+        try:
+            test_success, errors = gdclient.file_delete(file_id)
+        except Exception as e:
+            errors = f'ERROR. Failed to delete file {file_id}. {str(e)}'
+    else:
+        errors = 'GDrive client not loaded.'
     test_result['success'] = test_success
     if errors:
         test_result['errors'] = errors
