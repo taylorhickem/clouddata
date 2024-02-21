@@ -1,8 +1,7 @@
 import os
 import json
-from clouddata.integrations import GDriveToS3, ArchiveDB
 from clouddata.gdrive import GDriveClient
-from clouddata.archive import DirectoryArchive
+from clouddata.archive import DirectoryArchive, ArchiveDB, S3ArchiveClient
 
 
 TESTS = [
@@ -33,6 +32,8 @@ FILE_MIME_TYPE = 'text/csv'
 GDRIVE_ARCHIVE_FOLDER_ID = '1DohL6tboDJIMbAqEZpEWB_DCwstgJc4H'
 ARCHIVE_BUCKET = 'taylorhickem-datadetective-archive-standard'
 ARCHIVE_PREFIX = 'archives'
+DIRECTORY_MAP_BUCKET = 'taylorhickem-data-governance'
+DIRECTORY_MAP_PREFIX = 'archives/directory_maps'
 GOOGLE_ACCOUNT_ID = 'taylor.hickem@gmail.com'
 TEST_RESULTS = {}
 gdclient = None
@@ -353,29 +354,34 @@ def test_010_file_download():
 
 
 def test_011_leaf_directory_archive():
+    data_service = 'google_drive'
     google_account_id = GOOGLE_ACCOUNT_ID
     s3_bucket = ARCHIVE_BUCKET
     s3_prefix = ARCHIVE_PREFIX
+    dir_map_bucket = DIRECTORY_MAP_BUCKET
+    dir_map_prefix = DIRECTORY_MAP_PREFIX
     gdrive_folder = LEAF_FOLDER_NAME
     folder_id = LEAF_FOLDER_ID
     archive_tag = 'test'
     test_result = {}
-    migrator = None
+    archive_client = None
     test_success = False
     errors = ''
     try:
-        migrator = GDriveToS3()
-        migrator.login()
+        archive_client = S3ArchiveClient(data_service=data_service)
+        archive_client.login()
         test_success = True
     except Exception as e:
-        errors = f'ERROR. GDriveToS3 migration client failed to load. {str(e)}'
+        errors = f'ERROR. S3 archive client failed to load. {str(e)}'
     if test_success:
         try:
-            archive_success, errors = migrator.directory_archive_to_s3(
+            archive_success, errors = archive_client.gdrive_folder_archive_to_s3(
                 gdrive_folder,s3_bucket,
                 gdrive_folder_id=folder_id,
                 google_account_id=google_account_id,
                 bucket_prefix=s3_prefix,
+                dir_map_bucket=dir_map_bucket,
+                dir_map_prefix=dir_map_prefix,
                 archive_tag=archive_tag,
                 status_updates=True
             )
@@ -449,6 +455,8 @@ def test_014_archive_db_record_create():
     service_provider = 'google_drive'
     google_account_id = GOOGLE_ACCOUNT_ID
     s3_dir_path = f's3://{ARCHIVE_BUCKET}/{ARCHIVE_PREFIX}/'
+    dir_map_bucket = DIRECTORY_MAP_BUCKET
+    dir_map_prefix = DIRECTORY_MAP_PREFIX
     db_client = None
     test_result = {}
     test_success = False
@@ -471,7 +479,10 @@ def test_014_archive_db_record_create():
         if archive:
             test_result['archive'] = archive
         try:
-            db_client = ArchiveDB()
+            db_client = ArchiveDB(
+                dir_maps_bucket=dir_map_bucket,
+                dir_maps_prefix=dir_map_prefix
+            )
             db_client.connect()
             record = db_client.record_from_metadata(archive.metadata)
             test_success = len(record) > 0
